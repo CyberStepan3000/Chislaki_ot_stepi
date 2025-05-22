@@ -424,4 +424,95 @@ class Slau:
         plt.legend()
         plt.show()
 
+def jacobi_eigen_with_check(A, epsilon=0.0001, check_tolerance=1e-5):
+    """
+    Находит собственные значения и векторы методом Якоби 
+    и проверяет A * v = λ * v с использованием исходной матрицы.
+
+    Параметры:
+        A - исходная симметричная матрица (numpy array)
+        epsilon - точность для метода Якоби (float)
+        check_tolerance - допустимая погрешность проверки (float)
+
+    Возвращает:
+        eigenvalues - собственные значения
+        eigenvectors - собственные векторы (по столбцам)
+    """
+    n = A.shape[0]
+    A_current = A.copy()  # Рабочая копия матрицы
+    eigenvectors = np.eye(n)
     
+    # --- Метод Якоби ---
+    while True:
+        # Находим максимальный недиагональный элемент
+        max_val = 0
+        p, q = 0, 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                if abs(A_current[i, j]) > max_val:
+                    max_val = abs(A_current[i, j])
+                    p, q = i, j
+        
+        if max_val < epsilon:
+            break
+        
+        # Вычисляем угол поворота
+        if np.isclose(A_current[p, p], A_current[q, q]):
+            theta = np.pi / 4
+        else:
+            theta = 0.5 * np.arctan(2 * A_current[p, q] / (A_current[p, p] - A_current[q, q]))
+        
+        # Матрица вращения
+        rotation = np.eye(n)
+        c = np.cos(theta)
+        s = np.sin(theta)
+        rotation[p, p] = c
+        rotation[q, q] = c
+        rotation[p, q] = -s
+        rotation[q, p] = s
+        
+        # Применяем вращение
+        A_current = rotation.T @ A_current @ rotation
+        eigenvectors = eigenvectors @ rotation
+    
+    eigenvalues = np.diag(A_current)
+
+    # --- Проверка с ИСХОДНОЙ матрицей A ---
+    print("\n🔹 Проверка A * v = λ * v:")
+    all_ok = True
+    for i in range(n):
+        λ = eigenvalues[i]
+        v = eigenvectors[:, i]
+        
+        Av = A @ v  # Умножаем на исходную матрицу!
+        λv = λ * v
+        
+        error = np.linalg.norm(Av - λv)
+        print(f"λ_{i} = {λ:.6f}: Ошибка = {error:.10f}", end=" ")
+        
+        if error < check_tolerance:
+            print(" (OK)")  
+        else:
+            print("(not OK) (Ошибка слишком велика!)")
+            all_ok = False
+    
+    if all_ok:
+        print("\nВсе проверки пройдены успешно!")
+    else:
+        print("\nВнимание: есть ошибки в вычислениях!")
+    
+    return eigenvalues, eigenvectors
+
+# Пример использования
+A = np.array([
+    [1, 22, 1],
+    [22, 1, 1],
+    [1, 1, 23]
+], dtype=float)
+
+eigenvalues, eigenvectors = jacobi_eigen_with_check(A, epsilon=0.0001)
+
+print("\nСобственные значения:")
+print(eigenvalues)
+print("\nСобственные векторы (по столбцам):")
+print(eigenvectors)

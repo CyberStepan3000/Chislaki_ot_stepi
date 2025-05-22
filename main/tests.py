@@ -14,6 +14,7 @@ from SLAU import *
 #print("A = \n", A)
 #x = solver.gauss_jordan()
 #print (x)
+
 ### ----- Вторая задача -----
 
 # A = np.array([
@@ -174,3 +175,18 @@ else:
     print("3. Нужны более продвинутые методы предобуславливания")
     
     print(f"\nТочное решение: x1 = {exact_solution[0]:.6f}, x2 = {exact_solution[1]:.6f}, x3 = {exact_solution[2]:.6f}")
+    
+### ----- Пятая задача -----
+
+# A = np.array([
+#     [1, 22, 1],
+#     [22, 1, 1],
+#     [1, 1, 23]
+# ], dtype=float)
+
+# eigenvalues, eigenvectors = jacobi_eigen_with_check(A, 0.01)
+
+# print("Собственные значения:")
+# print(eigenvalues)
+# print("\nСобственные векторы (по столбцам):")
+# print(eigenvectors)
