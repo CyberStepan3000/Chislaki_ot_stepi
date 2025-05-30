@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from itertools import permutations
 
 class Slau:
     def __init__(self, A: np.ndarray, b: np.ndarray):
@@ -138,291 +139,108 @@ class Slau:
         
         return diagonal_dominant, rho_jacobi < 1
     
-    def reorder_for_convergence(self):
-        """Перестановка строк для достижения диагонального преобладания"""
-        print("\n=== ПОПЫТКА ПЕРЕСТАНОВКИ СТРОК ===")
-        
-        # Находим оптимальную перестановку строк
-        best_permutation = None
-        best_score = -1
-        
-        from itertools import permutations
-        
+    
+    def __init__(self, A: np.ndarray, b: np.ndarray):
+        self.A = A.astype(float)
+        self.b = b.astype(float)
+        self.n = A.shape[0]
+        self.original_A = A.copy()
+        self.original_b = b.copy()
+
+    def make_diagonally_dominant(self):
+        """Пытается переставить строки матрицы, чтобы сделать её диагонально преобладающей"""
         for perm in permutations(range(self.n)):
             A_perm = self.A[list(perm), :]
             b_perm = self.b[list(perm)]
-            
-            # Проверяем диагональное преобладание
-            score = 0
-            for i in range(self.n):
-                diagonal_elem = abs(A_perm[i, i])
-                sum_other = sum(abs(A_perm[i, j]) for j in range(self.n) if j != i)
-                if diagonal_elem > sum_other:
-                    score += 1
-            
-            if score > best_score:
-                best_score = score
-                best_permutation = perm
-                if score == self.n:  # Полное диагональное преобладание
-                    break
-        
-        if best_permutation and best_score > 0:
-            print(f"Найдена перестановка: {best_permutation}")
-            print(f"Строк с диагональным преобладанием: {best_score}/{self.n}")
-            
-            self.A = self.A[list(best_permutation), :]
-            self.b = self.b[list(best_permutation)]
-            self.augmented_matrix = np.hstack([self.A.copy(), self.b.reshape(-1, 1)])
-            
-            print("\nНовая матрица A:")
-            print(self.A)
-            print("Новый вектор b:")
-            print(self.b)
-            
-            return True
-        else:
-            print("Не удалось найти перестановку для диагонального преобладания")
-            return False
-    
-    def simple_iteration_method(self, epsilon=0.01, max_iterations=1000):
-        """Метод простых итераций (метод Якоби)"""
-        print("\n=== МЕТОД ПРОСТЫХ ИТЕРАЦИЙ ===")
-        
-        # Преобразование к итерационному виду x = Bx + c
+            if all(abs(A_perm[i, i]) >= sum(abs(A_perm[i, j]) for j in range(self.n) if j != i) for i in range(self.n)):
+                self.A = A_perm
+                self.b = b_perm
+                print("Матрица успешно преобразована к диагонально преобладающему виду")
+                return True
+        print("Не удалось привести матрицу к диагонально преобладающему виду")
+        return False
+
+    def restore_original(self):
+        self.A = self.original_A.copy()
+        self.b = self.original_b.copy()
+        print("Матрица и вектор b восстановлены до исходного состояния")
+
+    def simple_iteration_method(self, epsilon=0.01, max_iterations=100): 
+        print("\n=== МЕТОД ПРОСТЫХ ИТЕРАЦИЙ (ЯКОБИ) ===")
         D = np.diag(np.diag(self.A))
         L = np.tril(self.A, -1)
         U = np.triu(self.A, 1)
         
-        # Проверка на нулевые диагональные элементы
         if np.any(np.diag(D) == 0):
             print("ОШИБКА: Обнаружен нулевой диагональный элемент!")
             return None, [], []
-        
+
         B = -np.linalg.inv(D) @ (L + U)
         c = np.linalg.inv(D) @ self.b
-        
-        # Проверка спектрального радиуса
+
         rho = max(abs(np.linalg.eigvals(B)))
-        print(f"Спектральный радиус итерационной матрицы: {rho:.6f}")
-        
+        print(f"Спектральный радиус: {rho:.6f}")
+
         if rho >= 1:
-            print("ПРЕДУПРЕЖДЕНИЕ: Спектральный радиус >= 1, метод может не сходиться!")
-        
-        # Начальное приближение
+            print("ПРЕДУПРЕЖДЕНИЕ: Метод может не сходиться (rho >= 1)")
+
         x = np.zeros(self.n)
-        
-        iterations = []
-        errors = []
-        
-        print(f"{'Итерация':<10} {'x1':<12} {'x2':<12} {'x3':<12} {'Погрешность':<12}")
+        iterations, errors = [], []
+
+        print(f"{'Итерация':<10} {'x':<36} {'Погрешность':<12}")
         print("-" * 60)
-        
+
         for k in range(max_iterations):
             x_new = B @ x + c
-            
-            # Проверка на расходимость
-            if np.any(np.isnan(x_new)) or np.any(np.isinf(x_new)) or np.linalg.norm(x_new) > 1e10:
-                print(f"РАСХОДИМОСТЬ на итерации {k+1}!")
-                return None, iterations, errors
-            
-            # Вычисление погрешности
             error = np.linalg.norm(x_new - x, ord=np.inf)
-            
             iterations.append(k + 1)
             errors.append(error)
-            
-            print(f"{k+1:<10} {x_new[0]:<12.6f} {x_new[1]:<12.6f} {x_new[2]:<12.6f} {error:<12.6f}")
-            
+            print(f"{k+1:<10} {str(np.round(x_new, 6)):<36} {error:<12.6f}")
             if error < epsilon:
                 print(f"\nСходимость достигнута за {k+1} итераций")
                 return x_new, iterations, errors
-            
             x = x_new.copy()
-        
-        print(f"\nМаксимальное количество итераций ({max_iterations}) достигнуто")
+
+        print("\nМаксимальное число итераций достигнуто")
         return x, iterations, errors
-    
-    def relaxation_method(self, omega=0.5, epsilon=0.01, max_iterations=1000):
-        """Метод релаксации (SOR - Successive Over-Relaxation)"""
-        print(f"\n=== МЕТОД РЕЛАКСАЦИИ (ω = {omega}) ===")
-        
-        # Начальное приближение
-        x = np.zeros(self.n)
-        
-        iterations = []
-        errors = []
-        
-        print(f"{'Итерация':<10} {'x1':<12} {'x2':<12} {'x3':<12} {'Погрешность':<12}")
-        print("-" * 60)
-        
-        for k in range(max_iterations):
-            x_old = x.copy()
-            
-            # Обновление компонент вектора x с релаксацией
-            for i in range(self.n):
-                if abs(self.A[i, i]) < 1e-10:
-                    print(f"ОШИБКА: Диагональный элемент A[{i},{i}] близок к нулю!")
-                    return None, iterations, errors
-                
-                sum1 = sum(self.A[i, j] * x[j] for j in range(i))
-                sum2 = sum(self.A[i, j] * x_old[j] for j in range(i + 1, self.n))
-                
-                # Классический шаг Зейделя
-                x_seidel = (self.b[i] - sum1 - sum2) / self.A[i, i]
-                
-                # Релаксация
-                x[i] = (1 - omega) * x_old[i] + omega * x_seidel
-            
-            # Проверка на расходимость
-            if np.any(np.isnan(x)) or np.any(np.isinf(x)) or np.linalg.norm(x) > 1e10:
-                print(f"РАСХОДИМОСТЬ на итерации {k+1}!")
-                return None, iterations, errors
-            
-            # Вычисление погрешности
-            error = np.linalg.norm(x - x_old, ord=np.inf)
-            
-            iterations.append(k + 1)
-            errors.append(error)
-            
-            print(f"{k+1:<10} {x[0]:<12.6f} {x[1]:<12.6f} {x[2]:<12.6f} {error:<12.6f}")
-            
-            if error < epsilon:
-                print(f"\nСходимость достигнута за {k+1} итераций")
-                return x, iterations, errors
-        
-        print(f"\nМаксимальное количество итераций ({max_iterations}) достигнуто")
-        return x, iterations, errors
-    
-    def jacobi_with_damping(self, alpha=0.5, epsilon=0.01, max_iterations=1000):
-        """Метод Якоби с демпфированием"""
-        print(f"\n=== МЕТОД ЯКОБИ С ДЕМПФИРОВАНИЕМ (α = {alpha}) ===")
-        
-        # Преобразование к итерационному виду
-        D = np.diag(np.diag(self.A))
-        L = np.tril(self.A, -1)
-        U = np.triu(self.A, 1)
-        
-        if np.any(np.diag(D) == 0):
-            print("ОШИБКА: Обнаружен нулевой диагональный элемент!")
-            return None, [], []
-        
-        B = -np.linalg.inv(D) @ (L + U)
-        c = np.linalg.inv(D) @ self.b
-        
-        # Начальное приближение
-        x = np.zeros(self.n)
-        
-        iterations = []
-        errors = []
-        
-        print(f"{'Итерация':<10} {'x1':<12} {'x2':<12} {'x3':<12} {'Погрешность':<12}")
-        print("-" * 60)
-        
-        for k in range(max_iterations):
-            x_old = x.copy()
-            
-            # Классический шаг Якоби
-            x_jacobi = B @ x + c
-            
-            # Демпфирование
-            x = (1 - alpha) * x_old + alpha * x_jacobi
-            
-            # Проверка на расходимость
-            if np.any(np.isnan(x)) or np.any(np.isinf(x)) or np.linalg.norm(x) > 1e10:
-                print(f"РАСХОДИМОСТЬ на итерации {k+1}!")
-                return None, iterations, errors
-            
-            # Вычисление погрешности
-            error = np.linalg.norm(x - x_old, ord=np.inf)
-            
-            iterations.append(k + 1)
-            errors.append(error)
-            
-            print(f"{k+1:<10} {x[0]:<12.6f} {x[1]:<12.6f} {x[2]:<12.6f} {error:<12.6f}")
-            
-            if error < epsilon:
-                print(f"\nСходимость достигнута за {k+1} итераций")
-                return x, iterations, errors
-        
-        print(f"\nМаксимальное количество итераций ({max_iterations}) достигнуто")
-        return x, iterations, errors
-    
-    def seidel_method(self, epsilon=0.01, max_iterations=1000):
-        """Метод Зейделя"""
+
+    def seidel_method(self, epsilon=0.01, max_iterations=100):
         print("\n=== МЕТОД ЗЕЙДЕЛЯ ===")
-        
-        # Начальное приближение
         x = np.zeros(self.n)
-        
-        iterations = []
-        errors = []
-        
-        print(f"{'Итерация':<10} {'x1':<12} {'x2':<12} {'x3':<12} {'Погрешность':<12}")
+        iterations, errors = [], []
+
+        print(f"{'Итерация':<10} {'x':<36} {'Погрешность':<12}")
         print("-" * 60)
-        
+
         for k in range(max_iterations):
             x_old = x.copy()
-            
-            # Обновление компонент вектора x
             for i in range(self.n):
-                if abs(self.A[i, i]) < 1e-10:
-                    print(f"ОШИБКА: Диагональный элемент A[{i},{i}] близок к нулю!")
-                    return None, iterations, errors
-                
                 sum1 = sum(self.A[i, j] * x[j] for j in range(i))
                 sum2 = sum(self.A[i, j] * x_old[j] for j in range(i + 1, self.n))
+                if abs(self.A[i, i]) < 1e-10:
+                    print(f"ОШИБКА: A[{i},{i}] близок к нулю!")
+                    return None, iterations, errors
                 x[i] = (self.b[i] - sum1 - sum2) / self.A[i, i]
-            
-            # Проверка на расходимость
-            if np.any(np.isnan(x)) or np.any(np.isinf(x)) or np.linalg.norm(x) > 1e10:
-                print(f"РАСХОДИМОСТЬ на итерации {k+1}!")
-                return None, iterations, errors
-            
-            # Вычисление погрешности
             error = np.linalg.norm(x - x_old, ord=np.inf)
-            
             iterations.append(k + 1)
             errors.append(error)
-            
-            print(f"{k+1:<10} {x[0]:<12.6f} {x[1]:<12.6f} {x[2]:<12.6f} {error:<12.6f}")
-            
+            print(f"{k+1:<10} {str(np.round(x, 6)):<36} {error:<12.6f}")
             if error < epsilon:
                 print(f"\nСходимость достигнута за {k+1} итераций")
                 return x, iterations, errors
-        
-        print(f"\nМаксимальное количество итераций ({max_iterations}) достигнуто")
+
+        print("\nМаксимальное число итераций достигнуто")
         return x, iterations, errors
-    
+
     def check_solution(self, x):
-        """Проверка решения подстановкой в исходную систему"""
         print("\n=== ПРОВЕРКА РЕШЕНИЯ ===")
         residual = self.A @ x - self.b
-        print(f"Решение: x1 = {x[0]:.6f}, x2 = {x[1]:.6f}, x3 = {x[2]:.6f}")
+        print(f"Решение: {np.round(x, 6)}")
         print(f"Невязка: {residual}")
         print(f"Норма невязки: {np.linalg.norm(residual):.8f}")
-        
-        # Подстановка в каждое уравнение
-        print("\nПроверка каждого уравнения:")
         for i in range(self.n):
-            left_side = sum(self.A[i, j] * x[j] for j in range(self.n))
-            print(f"Уравнение {i+1}: {left_side:.6f} = {self.b[i]:.6f} (разность: {abs(left_side - self.b[i]):.8f})")
-    
-    def plot_convergence_multiple(self, methods_data):
-        """Построение графика сходимости для нескольких методов"""
-        plt.figure(figsize=(12, 8))
-        colors = ['b-o', 'r-s', 'g-^', 'm-d', 'c-*']
-        
-        for i, (name, iterations, errors) in enumerate(methods_data):
-            if len(iterations) > 0 and len(errors) > 0:
-                plt.semilogy(iterations, errors, colors[i % len(colors)], 
-                           label=name, markersize=4, linewidth=2)
-        
-        plt.xlabel('Номер итерации')
-        plt.ylabel('Погрешность (логарифмическая шкала)')
-        plt.title('Сравнение методов решения СЛАУ')
-        plt.grid(True, alpha=0.3)
-        plt.legend()
-        plt.show()
+            left = sum(self.A[i, j] * x[j] for j in range(self.n))
+            print(f"Уравнение {i+1}: {left:.6f} = {self.b[i]:.6f} (Δ={abs(left - self.b[i]):.8f})")
 
 def jacobi_eigen_with_check(A, epsilon=0.0001, check_tolerance=1e-5):
     """
@@ -502,17 +320,3 @@ def jacobi_eigen_with_check(A, epsilon=0.0001, check_tolerance=1e-5):
         print("\nВнимание: есть ошибки в вычислениях!")
     
     return eigenvalues, eigenvectors
-
-# Пример использования
-A = np.array([
-    [1, 22, 1],
-    [22, 1, 1],
-    [1, 1, 23]
-], dtype=float)
-
-eigenvalues, eigenvectors = jacobi_eigen_with_check(A, epsilon=0.0001)
-
-print("\nСобственные значения:")
-print(eigenvalues)
-print("\nСобственные векторы (по столбцам):")
-print(eigenvectors)
